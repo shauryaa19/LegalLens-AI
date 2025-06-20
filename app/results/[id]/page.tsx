@@ -2,6 +2,12 @@ import { prisma } from '@/lib/db';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { DetectedIssue } from '@/lib/legal-patterns';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface Props {
   params: Promise<{
@@ -319,43 +325,194 @@ export default async function ResultsPage({ params }: Props) {
             </div>
           </div>
 
-          <div className="divide-y divide-gray-100">
-            {issues.map((issue, index) => (
-              <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                                         <div className="flex items-center gap-3 mb-2">
-                       <span className={`px-2 py-1 text-xs font-medium rounded-full border ${getSeverityColor(issue.riskLevel)}`}>
-                         {issue.riskLevel.charAt(0) + issue.riskLevel.slice(1).toLowerCase()} Risk
-                       </span>
-                       <span className="text-sm text-gray-500">{issue.category}</span>
-                     </div>
-                     <h4 className="text-lg font-semibold text-gray-900 mb-2">{issue.name}</h4>
-                     <p className="text-gray-700 mb-3">{issue.issue}</p>
-                  </div>
-                  <div className="text-2xl ml-4">
-                    {issue.riskLevel === 'HIGH' ? '🚨' : issue.riskLevel === 'MEDIUM' ? '⚠️' : 'ℹ️'}
-                  </div>
-                </div>
+          <div className="p-6">
+            <Accordion type="multiple" className="w-full space-y-4">
+              {/* High Risk Issues */}
+              {highIssues.length > 0 && (
+                <AccordionItem value="high-risk" className="border-2 border-red-200 rounded-lg">
+                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-red-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-red-50">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">🚨</div>
+                      <div className="text-left">
+                        <h4 className="text-lg font-semibold text-red-900">
+                          High Risk Issues ({highIssues.length})
+                        </h4>
+                        <p className="text-sm text-red-600">Require immediate attention</p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-6 pb-6">
+                    <Accordion type="multiple" className="w-full">
+                      {highIssues.map((issue, index) => (
+                        <AccordionItem key={`high-${index}`} value={`high-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
+                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
+                            <div className="flex items-center justify-between w-full mr-4">
+                              <div className="flex items-center gap-3">
+                                <div className="text-xl">🚨</div>
+                                <div className="text-left">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm text-gray-500">{issue.category}</span>
+                                  </div>
+                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-4 pb-4">
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
+                                <p className="text-sm text-gray-700">{issue.issue}</p>
+                              </div>
+                              <div className="bg-amber-50 rounded-lg p-3">
+                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
+                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
+                              </div>
+                              <div className="bg-blue-50 rounded-lg p-3">
+                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
+                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
+                              </div>
+                              {issue.matchedText && (
+                                <div className="bg-green-50 rounded-lg p-3">
+                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
+                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
+                                    &quot;{issue.matchedText}&quot;
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
 
-                <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                  <h5 className="font-medium text-gray-900 mb-2">📋 Legal Basis</h5>
-                  <p className="text-sm text-gray-700">{issue.legalBasis}</p>
-                </div>
+              {/* Medium Risk Issues */}
+              {mediumIssues.length > 0 && (
+                <AccordionItem value="medium-risk" className="border-2 border-yellow-200 rounded-lg">
+                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-yellow-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-yellow-50">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">⚠️</div>
+                      <div className="text-left">
+                        <h4 className="text-lg font-semibold text-yellow-900">
+                          Medium Risk Issues ({mediumIssues.length})
+                        </h4>
+                        <p className="text-sm text-yellow-600">Should be reviewed and addressed</p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-6 pb-6">
+                    <Accordion type="multiple" className="w-full">
+                      {mediumIssues.map((issue, index) => (
+                        <AccordionItem key={`medium-${index}`} value={`medium-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
+                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
+                            <div className="flex items-center justify-between w-full mr-4">
+                              <div className="flex items-center gap-3">
+                                <div className="text-xl">⚠️</div>
+                                <div className="text-left">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm text-gray-500">{issue.category}</span>
+                                  </div>
+                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-4 pb-4">
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
+                                <p className="text-sm text-gray-700">{issue.issue}</p>
+                              </div>
+                              <div className="bg-amber-50 rounded-lg p-3">
+                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
+                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
+                              </div>
+                              <div className="bg-blue-50 rounded-lg p-3">
+                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
+                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
+                              </div>
+                              {issue.matchedText && (
+                                <div className="bg-green-50 rounded-lg p-3">
+                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
+                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
+                                    &quot;{issue.matchedText}&quot;
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
 
-                                 <div className="bg-blue-50 rounded-lg p-4">
-                   <h5 className="font-medium text-blue-900 mb-2">💡 Recommendation</h5>
-                   <p className="text-sm text-blue-800">{issue.suggestion}</p>
-                 </div>
-
-                 {issue.matchedText && (
-                   <div className="mt-4 bg-green-50 rounded-lg p-4">
-                     <h5 className="font-medium text-green-900 mb-2">📍 Matched Text</h5>
-                     <p className="text-sm text-green-800 italic">&quot;{issue.matchedText}&quot;</p>
-                   </div>
-                 )}
-              </div>
-            ))}
+              {/* Low Risk Issues */}
+              {lowIssues.length > 0 && (
+                <AccordionItem value="low-risk" className="border-2 border-green-200 rounded-lg">
+                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-green-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-green-50">
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">ℹ️</div>
+                      <div className="text-left">
+                        <h4 className="text-lg font-semibold text-green-900">
+                          Low Risk Issues ({lowIssues.length})
+                        </h4>
+                        <p className="text-sm text-green-600">Minor improvements for best practices</p>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-6 pb-6">
+                    <Accordion type="multiple" className="w-full">
+                      {lowIssues.map((issue, index) => (
+                        <AccordionItem key={`low-${index}`} value={`low-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
+                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
+                            <div className="flex items-center justify-between w-full mr-4">
+                              <div className="flex items-center gap-3">
+                                <div className="text-xl">ℹ️</div>
+                                <div className="text-left">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-sm text-gray-500">{issue.category}</span>
+                                  </div>
+                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="px-4 pb-4">
+                            <div className="space-y-3">
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
+                                <p className="text-sm text-gray-700">{issue.issue}</p>
+                              </div>
+                              <div className="bg-amber-50 rounded-lg p-3">
+                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
+                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
+                              </div>
+                              <div className="bg-blue-50 rounded-lg p-3">
+                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
+                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
+                              </div>
+                              {issue.matchedText && (
+                                <div className="bg-green-50 rounded-lg p-3">
+                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
+                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
+                                    &quot;{issue.matchedText}&quot;
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </AccordionContent>
+                </AccordionItem>
+              )}
+            </Accordion>
           </div>
         </div>
 

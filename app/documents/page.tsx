@@ -65,8 +65,14 @@ export default function DocumentsPage() {
       if (!response.ok) {
         throw new Error('Failed to fetch documents');
       }
-      const data = await response.json();
-      setDocuments(data.documents || []);
+      const result = await response.json();
+      console.log('API Response:', result);
+      if (result.success) {
+        setDocuments(result.data.documents || []);
+        console.log('Documents loaded:', result.data.documents?.length || 0);
+      } else {
+        throw new Error(result.error || 'Failed to fetch documents');
+      }
     } catch (error) {
       console.error('Error fetching documents:', error);
       setError(error instanceof Error ? error.message : 'Failed to load documents');
