@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  documents Document[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Document {
+  id          String   @id @default(cuid())
+  title       String
+  originalName String  // Original filename
+  content     String   // Extracted text content
+  filePath    String   // Local file path for MVP
+  fileSize    Int      // File size in bytes
+  mimeType    String   // File MIME type
+  wordCount   Int?     // Number of words in document
+  pageCount   Int?     // Number of pages (for PDFs)
+  userId      String   // For MVP, we'll use a default user
+  user        User     @relation(fields: [userId], references: [id])
+  analysis    Analysis?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Analysis {
+  id         String   @id @default(cuid())
+  documentId String   @unique
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  riskScore  Float    // 0-1 risk score
+  totalIssues Int     // Total number of issues found
+  issues     String   // JSON string of detected issues array
+  status     String   @default("completed") // completed, failed, processing
+  processingTime Int? // Time taken to analyze in milliseconds
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
