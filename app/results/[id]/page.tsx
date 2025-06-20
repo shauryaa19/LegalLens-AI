@@ -351,7 +351,7 @@ export default async function ResultsPage({ params }: Props) {
                  {issue.matchedText && (
                    <div className="mt-4 bg-green-50 rounded-lg p-4">
                      <h5 className="font-medium text-green-900 mb-2">📍 Matched Text</h5>
-                     <p className="text-sm text-green-800 italic">"{issue.matchedText}"</p>
+                     <p className="text-sm text-green-800 italic">&quot;{issue.matchedText}&quot;</p>
                    </div>
                  )}
               </div>
