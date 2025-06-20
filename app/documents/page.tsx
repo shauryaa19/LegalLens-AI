@@ -1,4 +1,6 @@
-import { prisma } from '@/lib/db';
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,20 +15,65 @@ import {
   Plus,
   Search,
   Filter,
-  Download
+  Download,
+  Loader2
 } from 'lucide-react';
 
-export default async function DocumentsPage() {
-  // Fetch all documents with their analysis
-  const documents = await prisma.document.findMany({
-    include: {
-      analysis: true,
-      user: true
-    },
-    orderBy: {
-      createdAt: 'desc'
+interface Document {
+  id: string;
+  title: string;
+  originalName: string;
+  content: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  wordCount: number | null;
+  pageCount: number | null;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+  analysis?: {
+    id: string;
+    riskScore: number;
+    totalIssues: number;
+    issues: string;
+    status: string;
+    processingTime: number | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  user?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  };
+}
+
+export default function DocumentsPage() {
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/documents');
+      if (!response.ok) {
+        throw new Error('Failed to fetch documents');
+      }
+      const data = await response.json();
+      setDocuments(data.documents || []);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load documents');
+    } finally {
+      setLoading(false);
     }
-  });
+  };
 
   const getRiskLevel = (score: number) => {
     if (score <= 0.3) return { level: "Low", color: "text-green-600", bgColor: "bg-green-50", borderColor: "border-green-200" }
@@ -39,6 +86,94 @@ export default async function DocumentsPage() {
     if (score <= 0.7) return <AlertTriangle className="h-4 w-4 text-yellow-600" />
     return <AlertTriangle className="h-4 w-4 text-red-600" />
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white border-b shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+                <Scale className="h-8 w-8 text-blue-600" />
+                Legal Document Analyzer
+              </Link>
+              <nav className="flex items-center gap-4">
+                <Link 
+                  href="/" 
+                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Upload New
+                </Link>
+                <Button asChild>
+                  <Link href="/">
+                    <FileText className="h-4 w-4 mr-2" />
+                    New Analysis
+                  </Link>
+                </Button>
+              </nav>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600">Loading documents...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <header className="bg-white border-b shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-4">
+            <div className="flex items-center justify-between">
+              <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+                <Scale className="h-8 w-8 text-blue-600" />
+                Legal Document Analyzer
+              </Link>
+              <nav className="flex items-center gap-4">
+                <Link 
+                  href="/" 
+                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Upload New
+                </Link>
+                <Button asChild>
+                  <Link href="/">
+                    <FileText className="h-4 w-4 mr-2" />
+                    New Analysis
+                  </Link>
+                </Button>
+              </nav>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-7xl mx-auto px-4 py-8">
+          <Card>
+            <CardContent className="p-12 text-center">
+              <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Documents</h3>
+              <p className="text-gray-600 mb-6">{error}</p>
+              <Button onClick={fetchDocuments}>
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
