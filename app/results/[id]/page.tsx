@@ -1,39 +1,133 @@
-import { prisma } from '@/lib/db';
-import { notFound } from 'next/navigation';
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DetectedIssue } from '@/lib/legal-patterns';
+import FactAwareAnalysis from '@/components/fact-aware-analysis';
+import { FactAwareAnalysisResult } from '@/lib/clause-analyzer';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { 
+  Scale, 
+  FileText, 
+  Brain, 
+  AlertTriangle, 
+  CheckCircle, 
+  Clock,
+  Download,
+  Share,
+  Loader2
+} from 'lucide-react';
 
-interface Props {
-  params: Promise<{
+interface Document {
+  id: string;
+  title: string;
+  originalName: string;
+  wordCount: number | null;
+  pageCount: number | null;
+  createdAt: string;
+  user?: {
     id: string;
-  }>;
+    name: string | null;
+    email: string | null;
+  };
 }
 
-export default async function ResultsPage({ params }: Props) {
-  // Await params for Next.js 15 compatibility
-  const { id } = await params;
-  
-  // Fetch document and analysis
-  const document = await prisma.document.findUnique({
-    where: { id },
-    include: {
-      analysis: true,
-      user: true
-    }
-  });
+interface Analysis {
+  id: string;
+  riskScore: number;
+  totalIssues: number;
+  issues: string;
+  status: string;
+  processingTime: number | null;
+}
 
-  if (!document || !document.analysis) {
-    notFound();
+interface ResultData {
+  document: Document;
+  analysis: Analysis;
+  factAwareAnalysis?: FactAwareAnalysisResult;
+  hasFactAwareAnalysis: boolean;
+}
+
+export default function ResultsPage() {
+  const params = useParams();
+  const id = params.id as string;
+  
+  const [data, setData] = useState<ResultData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('traditional');
+
+  useEffect(() => {
+    fetchResults();
+  }, [id]);
+
+  const fetchResults = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/analyze-clauses?documentId=${id}`);
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch results');
+      }
+      
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load results');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFactAwareAnalysisComplete = (analysis: FactAwareAnalysisResult) => {
+    setData(prev => prev ? {
+      ...prev,
+      factAwareAnalysis: analysis,
+      hasFactAwareAnalysis: true
+    } : null);
+    setActiveTab('fact-aware');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading analysis results...</p>
+        </div>
+      </div>
+    );
   }
 
-  const issues: DetectedIssue[] = JSON.parse(document.analysis.issues);
-  const riskScore = document.analysis.riskScore;
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Results</h3>
+            <p className="text-gray-600 mb-4">{error || 'Results not found'}</p>
+            <Button asChild>
+              <Link href="/documents">Back to Documents</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const issues: DetectedIssue[] = JSON.parse(data.analysis.issues);
+  const riskScore = data.analysis.riskScore;
   
   // Risk level calculation
   const getRiskLevel = (score: number) => {
@@ -71,21 +165,23 @@ export default async function ResultsPage({ params }: Props) {
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
-              ⚖️ Legal Document Analyzer
+              <Scale className="h-8 w-8 text-blue-600" />
+              Legal Document Analyzer
             </Link>
             <div className="flex items-center gap-3">
               <Link 
                 href="/documents" 
                 className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               >
-                📊 My Documents
+                <FileText className="h-4 w-4 mr-2 inline" />
+                My Documents
               </Link>
-              <Link 
-                href="/" 
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                📄 New Analysis
-              </Link>
+              <Button asChild>
+                <Link href="/">
+                  <FileText className="h-4 w-4 mr-2" />
+                  New Analysis
+                </Link>
+              </Button>
             </div>
           </div>
         </div>
@@ -112,466 +208,200 @@ export default async function ResultsPage({ params }: Props) {
                 Indian Contract Act 1872 Compliance Report
               </p>
               <p className="text-sm text-gray-500 mt-1">
-                Document: <span className="font-medium text-gray-700">{document.originalName}</span>
+                Document: <span className="font-medium text-gray-700">{data.document.originalName}</span>
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <button className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
-                📥 Download Report
-              </button>
-              <button className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
-                📧 Share Report
-              </button>
+              <Button variant="outline">
+                <Download className="h-4 w-4 mr-2" />
+                Download Report
+              </Button>
+              <Button variant="outline">
+                <Share className="h-4 w-4 mr-2" />
+                Share Report
+              </Button>
             </div>
           </div>
         </div>
 
-        {/* Risk Score Dashboard */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          {/* Main Risk Score */}
-          <div className="lg:col-span-2">
-            <div className={`${riskInfo.bgColor} ${riskInfo.borderColor} border-2 rounded-xl p-8`}>
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-4">
-                  <div className={`text-4xl ${riskInfo.color}`}>
-                    {riskScore <= 0.3 ? '✅' : riskScore <= 0.7 ? '⚠️' : '🚨'}
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold text-gray-900">Risk Assessment</h2>
-                    <p className="text-gray-600 text-lg">Overall compliance evaluation</p>
-                  </div>
-                </div>
-                <div className={`px-6 py-3 border-2 rounded-xl ${riskInfo.color} bg-white font-bold text-xl`}>
-                  {riskInfo.level} Risk
-                </div>
-              </div>
-              
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-medium text-gray-700">Compliance Score</span>
-                  <span className={`text-4xl font-bold ${riskInfo.color}`}>
-                    {Math.round((1 - riskScore) * 100)}%
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-4">
-                  <div 
-                    className={`h-4 rounded-full transition-all duration-1000 ${
-                      riskScore <= 0.3 ? 'bg-green-500' : 
-                      riskScore <= 0.7 ? 'bg-yellow-500' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${(1 - riskScore) * 100}%` }}
-                  ></div>
-                </div>
-                <div className="flex justify-between text-sm text-gray-600">
-                  <span>Risk Score: {Math.round(riskScore * 100)}%</span>
-                  <span>{document.analysis.totalIssues} issues identified</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick Stats */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900">Processing Stats</h3>
-                <span className="text-2xl">⚡</span>
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Processing Time</span>
-                  <span className="font-medium">
-                    {(document.analysis.processingTime ? document.analysis.processingTime / 1000 : 0).toFixed(2)}s
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Words Analyzed</span>
-                  <span className="font-medium">{document.wordCount?.toLocaleString() || 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Pages Scanned</span>
-                  <span className="font-medium">{document.pageCount || 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900">Document Info</h3>
-                <span className="text-2xl">📄</span>
-              </div>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">File Size</span>
-                  <span className="font-medium">
-                    {document.fileSize ? `${(document.fileSize / 1024).toFixed(1)} KB` : 'N/A'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Analyzed</span>
-                  <span className="font-medium">
-                    {new Date(document.analysis.createdAt).toLocaleDateString()}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Type</span>
-                  <span className="font-medium">{document.mimeType?.split('/')[1]?.toUpperCase() || 'N/A'}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Issues Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="bg-red-50 border-b border-red-100 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-red-600">High Risk Issues</p>
-                  <p className="text-3xl font-bold text-red-700">{highIssues.length}</p>
-                </div>
-                <div className="text-4xl">🚨</div>
-              </div>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-gray-600">Require immediate legal review and correction</p>
-              {highIssues.length > 0 && (
-                                 <div className="mt-3 space-y-1">
-                   {highIssues.slice(0, 2).map((issue, idx) => (
-                     <p key={idx} className="text-xs text-red-700 bg-red-50 px-2 py-1 rounded truncate">
-                       {issue.name}
-                     </p>
-                   ))}
-                   {highIssues.length > 2 && (
-                     <p className="text-xs text-gray-500">+{highIssues.length - 2} more issues</p>
-                   )}
-                 </div>
+        {/* Analysis Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="traditional" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Traditional Analysis
+            </TabsTrigger>
+            <TabsTrigger value="fact-aware" className="flex items-center gap-2">
+              <Brain className="h-4 w-4" />
+              AI Fact-Aware Analysis
+              {data.hasFactAwareAnalysis && (
+                <Badge variant="secondary" className="ml-2">New</Badge>
               )}
-            </div>
-          </div>
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="bg-yellow-50 border-b border-yellow-100 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-yellow-600">Medium Risk Issues</p>
-                  <p className="text-3xl font-bold text-yellow-700">{mediumIssues.length}</p>
-                </div>
-                <div className="text-4xl">⚠️</div>
-              </div>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-gray-600">Should be reviewed and addressed</p>
-              {mediumIssues.length > 0 && (
-                                 <div className="mt-3 space-y-1">
-                   {mediumIssues.slice(0, 2).map((issue, idx) => (
-                     <p key={idx} className="text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded truncate">
-                       {issue.name}
-                     </p>
-                   ))}
-                   {mediumIssues.length > 2 && (
-                     <p className="text-xs text-gray-500">+{mediumIssues.length - 2} more issues</p>
-                   )}
-                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-            <div className="bg-green-50 border-b border-green-100 p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-green-600">Low Risk Issues</p>
-                  <p className="text-3xl font-bold text-green-700">{lowIssues.length}</p>
-                </div>
-                <div className="text-4xl">ℹ️</div>
-              </div>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-gray-600">Minor improvements for best practices</p>
-              {lowIssues.length > 0 && (
-                                 <div className="mt-3 space-y-1">
-                   {lowIssues.slice(0, 2).map((issue, idx) => (
-                     <p key={idx} className="text-xs text-green-700 bg-green-50 px-2 py-1 rounded truncate">
-                       {issue.name}
-                     </p>
-                   ))}
-                   {lowIssues.length > 2 && (
-                     <p className="text-xs text-gray-500">+{lowIssues.length - 2} more issues</p>
-                   )}
-                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Detailed Issues */}
-        <div className="bg-white rounded-xl border shadow-sm">
-          <div className="border-b border-gray-200 p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900">Detailed Analysis</h3>
-                <p className="text-gray-600 mt-1">All identified compliance issues with recommendations</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1 text-xs border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50">
-                  Filter by Risk
-                </button>
-                <button className="px-3 py-1 text-xs border border-gray-300 rounded-md text-gray-600 hover:bg-gray-50">
-                  Sort by Severity
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6">
-            <Accordion type="multiple" className="w-full space-y-4">
-              {/* High Risk Issues */}
-              {highIssues.length > 0 && (
-                <AccordionItem value="high-risk" className="border-2 border-red-200 rounded-lg">
-                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-red-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-red-50">
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">🚨</div>
-                      <div className="text-left">
-                        <h4 className="text-lg font-semibold text-red-900">
-                          High Risk Issues ({highIssues.length})
-                        </h4>
-                        <p className="text-sm text-red-600">Require immediate attention</p>
+          {/* Traditional Analysis Tab */}
+          <TabsContent value="traditional" className="space-y-6">
+            {/* Risk Score Dashboard */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Main Risk Score */}
+              <div className="lg:col-span-2">
+                <Card className={`${riskInfo.bgColor} ${riskInfo.borderColor} border-2`}>
+                  <CardContent className="p-8">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-4">
+                        <div className={`text-4xl ${riskInfo.color}`}>
+                          {riskScore <= 0.3 ? '✅' : riskScore <= 0.7 ? '⚠️' : '🚨'}
+                        </div>
+                        <div>
+                          <h2 className="text-3xl font-bold text-gray-900">Risk Assessment</h2>
+                          <p className="text-gray-600 text-lg">Overall compliance evaluation</p>
+                        </div>
+                      </div>
+                      <Badge className={`px-6 py-3 text-xl ${riskInfo.color} bg-white border-2`}>
+                        {riskInfo.level} Risk
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-medium text-gray-700">Compliance Score</span>
+                        <span className={`text-4xl font-bold ${riskInfo.color}`}>
+                          {Math.round((1 - riskScore) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-4">
+                        <div 
+                          className={`h-4 rounded-full transition-all duration-1000 ${
+                            riskScore <= 0.3 ? 'bg-green-500' : 
+                            riskScore <= 0.7 ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}
+                          style={{ width: `${(1 - riskScore) * 100}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Risk Score: {Math.round(riskScore * 100)}%</span>
+                        <span>{data.analysis.totalIssues} issues identified</span>
                       </div>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6">
-                    <Accordion type="multiple" className="w-full">
-                      {highIssues.map((issue, index) => (
-                        <AccordionItem key={`high-${index}`} value={`high-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
-                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
-                            <div className="flex items-center justify-between w-full mr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="text-xl">🚨</div>
-                                <div className="text-left">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm text-gray-500">{issue.category}</span>
-                                  </div>
-                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
-                                </div>
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <div className="space-y-3">
-                              <div className="bg-gray-50 rounded-lg p-3">
-                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
-                                <p className="text-sm text-gray-700">{issue.issue}</p>
-                              </div>
-                              <div className="bg-amber-50 rounded-lg p-3">
-                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
-                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
-                              </div>
-                              <div className="bg-blue-50 rounded-lg p-3">
-                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
-                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
-                              </div>
-                              {issue.matchedText && (
-                                <div className="bg-green-50 rounded-lg p-3">
-                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
-                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
-                                    &quot;{issue.matchedText}&quot;
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </AccordionContent>
-                </AccordionItem>
-              )}
+                  </CardContent>
+                </Card>
+              </div>
 
-              {/* Medium Risk Issues */}
-              {mediumIssues.length > 0 && (
-                <AccordionItem value="medium-risk" className="border-2 border-yellow-200 rounded-lg">
-                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-yellow-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-yellow-50">
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">⚠️</div>
-                      <div className="text-left">
-                        <h4 className="text-lg font-semibold text-yellow-900">
-                          Medium Risk Issues ({mediumIssues.length})
-                        </h4>
-                        <p className="text-sm text-yellow-600">Should be reviewed and addressed</p>
+              {/* Quick Stats */}
+              <div className="space-y-4">
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-900">Processing Stats</h3>
+                      <Clock className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Processing Time</span>
+                        <span className="font-medium">
+                          {(data.analysis.processingTime ? data.analysis.processingTime / 1000 : 0).toFixed(2)}s
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Words Analyzed</span>
+                        <span className="font-medium">{data.document.wordCount?.toLocaleString() || 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Pages Scanned</span>
+                        <span className="font-medium">{data.document.pageCount || 'N/A'}</span>
                       </div>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6">
-                    <Accordion type="multiple" className="w-full">
-                      {mediumIssues.map((issue, index) => (
-                        <AccordionItem key={`medium-${index}`} value={`medium-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
-                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
-                            <div className="flex items-center justify-between w-full mr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="text-xl">⚠️</div>
-                                <div className="text-left">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm text-gray-500">{issue.category}</span>
-                                  </div>
-                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
-                                </div>
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <div className="space-y-3">
-                              <div className="bg-gray-50 rounded-lg p-3">
-                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
-                                <p className="text-sm text-gray-700">{issue.issue}</p>
-                              </div>
-                              <div className="bg-amber-50 rounded-lg p-3">
-                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
-                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
-                              </div>
-                              <div className="bg-blue-50 rounded-lg p-3">
-                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
-                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
-                              </div>
-                              {issue.matchedText && (
-                                <div className="bg-green-50 rounded-lg p-3">
-                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
-                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
-                                    &quot;{issue.matchedText}&quot;
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </AccordionContent>
-                </AccordionItem>
-              )}
+                  </CardContent>
+                </Card>
 
-              {/* Low Risk Issues */}
-              {lowIssues.length > 0 && (
-                <AccordionItem value="low-risk" className="border-2 border-green-200 rounded-lg">
-                  <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-green-50 rounded-t-lg [&[data-state=open]]:rounded-b-none bg-green-50">
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">ℹ️</div>
-                      <div className="text-left">
-                        <h4 className="text-lg font-semibold text-green-900">
-                          Low Risk Issues ({lowIssues.length})
-                        </h4>
-                        <p className="text-sm text-green-600">Minor improvements for best practices</p>
+                <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold text-gray-900">Issue Breakdown</h3>
+                      <AlertTriangle className="h-6 w-6 text-yellow-600" />
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">High Risk</span>
+                        <Badge className="bg-red-100 text-red-800">{highIssues.length}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Medium Risk</span>
+                        <Badge className="bg-yellow-100 text-yellow-800">{mediumIssues.length}</Badge>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-500">Low Risk</span>
+                        <Badge className="bg-green-100 text-green-800">{lowIssues.length}</Badge>
                       </div>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6">
-                    <Accordion type="multiple" className="w-full">
-                      {lowIssues.map((issue, index) => (
-                        <AccordionItem key={`low-${index}`} value={`low-item-${index}`} className="border rounded-lg mb-3 last:mb-0">
-                          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-gray-50 rounded-t-lg [&[data-state=open]]:rounded-b-none">
-                            <div className="flex items-center justify-between w-full mr-4">
-                              <div className="flex items-center gap-3">
-                                <div className="text-xl">ℹ️</div>
-                                <div className="text-left">
-                                  <div className="flex items-center gap-2 mb-1">
-                                    <span className="text-sm text-gray-500">{issue.category}</span>
-                                  </div>
-                                  <h5 className="font-semibold text-gray-900">{issue.name}</h5>
-                                </div>
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <div className="space-y-3">
-                              <div className="bg-gray-50 rounded-lg p-3">
-                                <h6 className="font-medium text-gray-900 mb-1">📝 Issue Description</h6>
-                                <p className="text-sm text-gray-700">{issue.issue}</p>
-                              </div>
-                              <div className="bg-amber-50 rounded-lg p-3">
-                                <h6 className="font-medium text-amber-900 mb-1">📋 Legal Basis</h6>
-                                <p className="text-sm text-amber-800">{issue.legalBasis}</p>
-                              </div>
-                              <div className="bg-blue-50 rounded-lg p-3">
-                                <h6 className="font-medium text-blue-900 mb-1">💡 Recommendation</h6>
-                                <p className="text-sm text-blue-800">{issue.suggestion}</p>
-                              </div>
-                              {issue.matchedText && (
-                                <div className="bg-green-50 rounded-lg p-3">
-                                  <h6 className="font-medium text-green-900 mb-1">📍 Matched Text</h6>
-                                  <p className="text-sm text-green-800 italic font-mono bg-white px-2 py-1 rounded border">
-                                    &quot;{issue.matchedText}&quot;
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </AccordionContent>
-                </AccordionItem>
-              )}
-            </Accordion>
-          </div>
-        </div>
-
-        {/* Action Items */}
-        <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-8">
-          <div className="flex items-start gap-4">
-            <div className="text-4xl">🎯</div>
-            <div className="flex-1">
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">Next Steps</h3>
-              <div className="space-y-3">
-                {highIssues.length > 0 && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0"></div>
-                    <p className="text-gray-700">
-                      <strong>Priority:</strong> Address {highIssues.length} high-risk issue{highIssues.length > 1 ? 's' : ''} immediately to ensure legal compliance
-                    </p>
-                  </div>
-                )}
-                {mediumIssues.length > 0 && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-yellow-500 rounded-full mt-2 flex-shrink-0"></div>
-                    <p className="text-gray-700">
-                      <strong>Review:</strong> Consider addressing {mediumIssues.length} medium-risk issue{mediumIssues.length > 1 ? 's' : ''} to strengthen the contract
-                    </p>
-                  </div>
-                )}
-                <div className="flex items-start gap-3">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                  <p className="text-gray-700">
-                    <strong>Consult:</strong> Consider consulting with a legal professional for complex issues or final review
-                  </p>
-                </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Footer Actions */}
-        <div className="mt-8 flex items-center justify-between bg-white rounded-xl border shadow-sm p-6">
-          <div>
-            <p className="text-sm text-gray-500">
-              <strong>Disclaimer:</strong> This analysis is for informational purposes only and does not constitute legal advice.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link 
-              href="/documents"
-              className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              View All Documents
-            </Link>
-            <Link 
-              href="/"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              Analyze Another Document
-            </Link>
-          </div>
-        </div>
+            {/* Issues List */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Detected Issues</CardTitle>
+                <CardDescription>
+                  Issues found based on Indian Contract Act 1872 patterns
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Accordion type="single" collapsible className="w-full">
+                  {issues.map((issue, index) => (
+                    <AccordionItem key={index} value={`item-${index}`}>
+                      <AccordionTrigger className="text-left">
+                        <div className="flex items-center gap-3">
+                          <Badge className={getSeverityColor(issue.riskLevel)}>
+                            {issue.riskLevel}
+                          </Badge>
+                          <span className="font-semibold">{issue.name}</span>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pt-4">
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="font-medium text-gray-900 mb-2">Issue Description</h4>
+                            <p className="text-gray-700">{issue.issue}</p>
+                          </div>
+                          
+                          {issue.matchedText && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">Matched Text</h4>
+                              <p className="text-sm bg-gray-100 p-3 rounded border italic">
+                                "{issue.matchedText}"
+                              </p>
+                            </div>
+                          )}
+                          
+                          <div>
+                            <h4 className="font-medium text-gray-900 mb-2">Recommendation</h4>
+                            <p className="text-gray-700">{issue.suggestion}</p>
+                          </div>
+                          
+                          <div>
+                            <h4 className="font-medium text-gray-900 mb-2">Legal Basis</h4>
+                            <p className="text-sm text-gray-600">{issue.legalBasis}</p>
+                          </div>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Fact-Aware Analysis Tab */}
+          <TabsContent value="fact-aware" className="space-y-6">
+            <FactAwareAnalysis 
+              documentId={id}
+              onAnalysisComplete={handleFactAwareAnalysisComplete}
+            />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );
